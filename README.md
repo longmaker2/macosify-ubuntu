@@ -38,6 +38,28 @@ If you prefer a darker setup:
 - `--no-packages` — skip `apt install` steps
 - `--no-extensions` — skip extension enable/disable steps
 - `--show-apps-colored` — optional: custom colored “Show Apps” icon (Launchpad-like)
+- `--fonts-inter` — install and apply the Inter font (safe SF Pro–like feel)
+- `--cursor-size N` — set cursor size (example: `--cursor-size 24`)
+- `--finder-files` — Finder-like defaults for Files (prefer list view + useful columns)
+- `--clean-topbar` — minimal top bar cleanup (show date, hide seconds/battery percent)
+- `--wallpaper PATH` — set wallpaper from a local file path
+- `--wallpaper-dark PATH` — set dark-mode wallpaper from a local file path
+- `--laptop` — apply touchpad tweaks (tap-to-click, two-finger scroll, disable-while-typing)
+- `--mac-shortcuts` — set mac-like window cycling (Alt+` equivalent via Alt+Above_Tab)
+- `--quiet-notifications` — reduce notification noise (disable banners + lock screen)
+- `--tiling-assistant` — enable Ubuntu’s tiling assistant (optional; avoid multiple tilers)
+
+Example “enhanced” run:
+
+```bash
+./macosify-ubuntu.sh --light \
+	--fonts-inter \
+	--cursor-size 24 \
+	--finder-files \
+	--clean-topbar \
+	--laptop \
+	--mac-shortcuts
+```
 
 ## Notes
 

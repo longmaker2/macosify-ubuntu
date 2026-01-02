@@ -7,6 +7,36 @@ set -euo pipefail
 log() { printf "\n[%s] %s\n" "$(date +%H:%M:%S)" "$*"; }
 warn() { printf "\n[WARN] %s\n" "$*"; }
 
+gsettings_has_key() {
+  local schema="$1"
+  local key="$2"
+  gsettings list-keys "$schema" 2>/dev/null | grep -qx "$key"
+}
+
+gsettings_set_if_key_exists() {
+  local schema="$1"
+  local key="$2"
+  local value="$3"
+  if has_schema "$schema" && gsettings_has_key "$schema" "$key"; then
+    gsettings set "$schema" "$key" "$value" 2>/dev/null || true
+  fi
+}
+
+to_file_uri() {
+  # Print a file:// URI for a local path. Returns non-zero if path doesn't exist.
+  local p="$1"
+  python3 - <<'PY' "$p"
+import pathlib, sys
+from urllib.parse import quote
+
+p = sys.argv[1]
+path = pathlib.Path(p).expanduser().resolve()
+if not path.exists():
+    raise SystemExit(1)
+print('file://' + quote(str(path)))
+PY
+}
+
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     warn "Missing command: $1";
@@ -90,6 +120,131 @@ apply_gnome_defaults() {
   else
     gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
   fi
+}
+
+apply_mac_typography() {
+  if [[ "$DO_FONTS_INTER" != "true" ]]; then
+    return 0
+  fi
+
+  # Inter is a good, legally-safe approximation of SF Pro feel.
+  log "Applying macOS-like typography (Inter)"
+  gsettings set org.gnome.desktop.interface font-name 'Inter 11' 2>/dev/null || true
+  gsettings set org.gnome.desktop.interface document-font-name 'Inter 11' 2>/dev/null || true
+  # Leave monospace alone unless explicitly requested in the future.
+}
+
+apply_cursor_settings() {
+  if [[ -z "${CURSOR_SIZE:-}" ]]; then
+    return 0
+  fi
+  if [[ ! "$CURSOR_SIZE" =~ ^[0-9]+$ ]]; then
+    warn "Invalid --cursor-size: $CURSOR_SIZE (expected integer)"
+    return 0
+  fi
+
+  log "Setting cursor size to $CURSOR_SIZE"
+  gsettings set org.gnome.desktop.interface cursor-size "$CURSOR_SIZE" 2>/dev/null || true
+}
+
+apply_finder_like_files() {
+  if [[ "$DO_FINDER_FILES" != "true" ]]; then
+    return 0
+  fi
+
+  log "Applying Finder-like defaults for Files (Nautilus)"
+
+  # Prefer list view
+  gsettings_set_if_key_exists org.gnome.nautilus.preferences default-folder-viewer "'list-view'"
+
+  # Type-ahead search
+  gsettings_set_if_key_exists org.gnome.nautilus.preferences type-ahead-search true
+
+  # Reasonable default columns (name/size/type/modified)
+  gsettings_set_if_key_exists org.gnome.nautilus.list-view default-visible-columns "['name','size','type','modified']"
+  gsettings_set_if_key_exists org.gnome.nautilus.list-view default-column-order "['name','size','type','modified']"
+}
+
+apply_topbar_cleanup() {
+  if [[ "$DO_CLEAN_TOPBAR" != "true" ]]; then
+    return 0
+  fi
+
+  log "Applying minimal top bar cleanup"
+
+  # More macOS-ish clock (date, no seconds)
+  gsettings_set_if_key_exists org.gnome.desktop.interface clock-show-date true
+  gsettings_set_if_key_exists org.gnome.desktop.interface clock-show-seconds false
+
+  # Reduce visual noise
+  gsettings_set_if_key_exists org.gnome.desktop.interface show-battery-percentage false
+}
+
+apply_wallpaper() {
+  if [[ -z "${WALLPAPER_PATH:-}" && -z "${WALLPAPER_DARK_PATH:-}" ]]; then
+    return 0
+  fi
+
+  log "Setting wallpaper"
+
+  if [[ -n "${WALLPAPER_PATH:-}" ]]; then
+    local uri
+    if uri=$(to_file_uri "$WALLPAPER_PATH" 2>/dev/null); then
+      gsettings set org.gnome.desktop.background picture-uri "$uri" 2>/dev/null || true
+    else
+      warn "Wallpaper not found: $WALLPAPER_PATH"
+    fi
+  fi
+
+  if [[ -n "${WALLPAPER_DARK_PATH:-}" ]]; then
+    local urid
+    if urid=$(to_file_uri "$WALLPAPER_DARK_PATH" 2>/dev/null); then
+      gsettings set org.gnome.desktop.background picture-uri-dark "$urid" 2>/dev/null || true
+    else
+      warn "Dark wallpaper not found: $WALLPAPER_DARK_PATH"
+    fi
+  fi
+}
+
+apply_laptop_touchpad_defaults() {
+  if [[ "$DO_LAPTOP" != "true" ]]; then
+    return 0
+  fi
+
+  log "Applying laptop touchpad defaults"
+
+  # macOS-like basics
+  gsettings_set_if_key_exists org.gnome.desktop.peripherals.touchpad tap-to-click true
+  gsettings_set_if_key_exists org.gnome.desktop.peripherals.touchpad two-finger-scrolling-enabled true
+  gsettings_set_if_key_exists org.gnome.desktop.peripherals.touchpad disable-while-typing true
+  gsettings_set_if_key_exists org.gnome.desktop.peripherals.touchpad click-method "'fingers'"
+  # Gentle speed bump; safe fallback if unsupported
+  gsettings_set_if_key_exists org.gnome.desktop.peripherals.touchpad speed 0.2
+
+  # Note: On GNOME Wayland, 3-finger gestures (workspaces/overview) are built-in.
+}
+
+apply_mac_shortcuts() {
+  if [[ "$DO_MAC_SHORTCUTS" != "true" ]]; then
+    return 0
+  fi
+
+  log "Applying macOS-like keyboard shortcuts"
+
+  # Cmd+` equivalent: cycle windows in the current app.
+  # Use Above_Tab (works across many keyboard layouts) rather than 'grave'.
+  gsettings_set_if_key_exists org.gnome.desktop.wm.keybindings switch-group "['<Alt>Above_Tab']"
+  gsettings_set_if_key_exists org.gnome.desktop.wm.keybindings switch-group-backward "['<Shift><Alt>Above_Tab']"
+}
+
+apply_quiet_notifications() {
+  if [[ "$DO_QUIET_NOTIFICATIONS" != "true" ]]; then
+    return 0
+  fi
+
+  log "Reducing notification noise"
+  gsettings_set_if_key_exists org.gnome.desktop.notifications show-banners false
+  gsettings_set_if_key_exists org.gnome.desktop.notifications show-in-lock-screen false
 }
 
 pick_theme() {
@@ -180,7 +335,11 @@ apply_extensions() {
   disable_ext apps-menu@gnome-shell-extensions.gcampax.github.com
   disable_ext places-menu@gnome-shell-extensions.gcampax.github.com
   disable_ext window-list@gnome-shell-extensions.gcampax.github.com
-  disable_ext tiling-assistant@ubuntu.com
+  if [[ "$DO_TILING_ASSISTANT" == "true" ]]; then
+    enable_ext tiling-assistant@ubuntu.com
+  else
+    disable_ext tiling-assistant@ubuntu.com
+  fi
   disable_ext tilingshell@ferrarodomenico.com
   disable_ext space-bar@luchrioh
 
@@ -201,6 +360,24 @@ configure_dash2dock_lite() {
   # Running indicators
   gsettings set "$schema" running-indicator-style 1 2>/dev/null || true
   gsettings set "$schema" running-indicator-size 6 2>/dev/null || true
+
+  # macOS-like proportions & behavior (keys vary by version; only set if present)
+  gsettings_set_if_key_exists "$schema" icon-size 48
+  gsettings_set_if_key_exists "$schema" dock-location "'BOTTOM'"
+  gsettings_set_if_key_exists "$schema" panel-mode false
+
+  # Autohide behavior
+  gsettings_set_if_key_exists "$schema" autohide-dash true
+  gsettings_set_if_key_exists "$schema" autohide-dodge true
+  gsettings_set_if_key_exists "$schema" autohide-speed 0.25
+
+  # Spacing/padding (subtle)
+  gsettings_set_if_key_exists "$schema" icon-spacing 6
+  gsettings_set_if_key_exists "$schema" dock-padding 6
+  gsettings_set_if_key_exists "$schema" edge-distance 6
+
+  # Keep icons from shrinking when crowded
+  gsettings_set_if_key_exists "$schema" shrink-icons false
 
   # Reduce GPU-heavy effects a bit while keeping the look
   gsettings set "$schema" animate-icons true 2>/dev/null || true
@@ -339,7 +516,12 @@ ensure_power_profiles() {
 
 usage() {
   cat <<EOF
-Usage: $0 [--light|--dark] [--keep-desktop-icons] [--no-packages] [--no-extensions] [--show-apps-colored]
+Usage: $0 [--light|--dark]
+  [--keep-desktop-icons] [--no-packages] [--no-extensions]
+  [--show-apps-colored]
+  [--fonts-inter] [--cursor-size N] [--finder-files] [--clean-topbar]
+  [--wallpaper PATH] [--wallpaper-dark PATH]
+  [--laptop] [--mac-shortcuts] [--quiet-notifications] [--tiling-assistant]
 
 Defaults:
   --light
@@ -352,6 +534,16 @@ KEEP_DESKTOP_ICONS="false"
 DO_PACKAGES="true"
 DO_EXTENSIONS="true"
 DO_SHOW_APPS_COLORED="false"
+DO_FONTS_INTER="false"
+CURSOR_SIZE=""
+DO_FINDER_FILES="false"
+DO_CLEAN_TOPBAR="false"
+WALLPAPER_PATH=""
+WALLPAPER_DARK_PATH=""
+DO_LAPTOP="false"
+DO_MAC_SHORTCUTS="false"
+DO_QUIET_NOTIFICATIONS="false"
+DO_TILING_ASSISTANT="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -361,6 +553,16 @@ while [[ $# -gt 0 ]]; do
     --no-packages) DO_PACKAGES="false"; shift ;;
     --no-extensions) DO_EXTENSIONS="false"; shift ;;
     --show-apps-colored) DO_SHOW_APPS_COLORED="true"; shift ;;
+    --fonts-inter) DO_FONTS_INTER="true"; shift ;;
+    --cursor-size) CURSOR_SIZE="${2:-}"; shift 2 ;;
+    --finder-files) DO_FINDER_FILES="true"; shift ;;
+    --clean-topbar) DO_CLEAN_TOPBAR="true"; shift ;;
+    --wallpaper) WALLPAPER_PATH="${2:-}"; shift 2 ;;
+    --wallpaper-dark) WALLPAPER_DARK_PATH="${2:-}"; shift 2 ;;
+    --laptop) DO_LAPTOP="true"; shift ;;
+    --mac-shortcuts) DO_MAC_SHORTCUTS="true"; shift ;;
+    --quiet-notifications) DO_QUIET_NOTIFICATIONS="true"; shift ;;
+    --tiling-assistant) DO_TILING_ASSISTANT="true"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) warn "Unknown arg: $1"; usage; exit 1 ;;
   esac
@@ -381,12 +583,22 @@ if [[ "$DO_PACKAGES" == "true" ]]; then
     git curl unzip \
     ulauncher \
     power-profiles-daemon \
+    $( [[ "$DO_FONTS_INTER" == "true" ]] && echo fonts-inter ) \
     || true
 fi
 
 install_dash2dock_lite_from_github
 
 apply_gnome_defaults
+
+apply_mac_typography
+apply_cursor_settings
+apply_finder_like_files
+apply_topbar_cleanup
+apply_wallpaper
+apply_laptop_touchpad_defaults
+apply_mac_shortcuts
+apply_quiet_notifications
 
 if [[ "$DO_EXTENSIONS" == "true" ]]; then
   apply_extensions
