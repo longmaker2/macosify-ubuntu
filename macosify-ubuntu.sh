@@ -331,10 +331,28 @@ apply_extensions() {
   enable_ext compiz-alike-magic-lamp-effect@hermes83.github.com
 
   # Disable non-mac clutter
+  # Avoid duplicate docks/taskbars (common source of a "taskbar under the dock")
+  disable_ext ubuntu-dock@ubuntu.com
+  disable_ext dash-to-dock@micxgx.gmail.com
+  disable_ext dash-to-panel@jderose9.github.com
+
   disable_ext arcmenu@arcmenu.com
   disable_ext apps-menu@gnome-shell-extensions.gcampax.github.com
   disable_ext places-menu@gnome-shell-extensions.gcampax.github.com
   disable_ext window-list@gnome-shell-extensions.gcampax.github.com
+  disable_ext launch-new-instance@gnome-shell-extensions.gcampax.github.com
+
+  # Extra extensions that commonly make GNOME feel less "macOS-like"
+  disable_ext Vitals@CoreCoding.com
+  disable_ext gnome-ui-tune@itstime.tech
+  disable_ext auto-move-windows@gnome-shell-extensions.gcampax.github.com
+  disable_ext drive-menu@gnome-shell-extensions.gcampax.github.com
+  disable_ext native-window-placement@gnome-shell-extensions.gcampax.github.com
+  disable_ext screenshot-window-sizer@gnome-shell-extensions.gcampax.github.com
+  disable_ext light-style@gnome-shell-extensions.gcampax.github.com
+  disable_ext system-monitor@gnome-shell-extensions.gcampax.github.com
+  disable_ext windowsNavigator@gnome-shell-extensions.gcampax.github.com
+  disable_ext workspace-indicator@gnome-shell-extensions.gcampax.github.com
   if [[ "$DO_TILING_ASSISTANT" == "true" ]]; then
     enable_ext tiling-assistant@ubuntu.com
   else
@@ -357,14 +375,23 @@ configure_dash2dock_lite() {
 
   log "Configuring dock (Dash2Dock Lite)"
 
-  # Running indicators
-  gsettings set "$schema" running-indicator-style 1 2>/dev/null || true
-  gsettings set "$schema" running-indicator-size 6 2>/dev/null || true
+  # Running indicators (macOS-like dot/underline). Keys are typed; only set if present.
+  # Note: In Dash2Dock Lite:
+  # - 1 = "Dots" (multiple)
+  # - 2 = "Dot"  (single; closest to macOS)
+  # - 9 = "Triangles" (avoid)
+  gsettings_set_if_key_exists "$schema" running-indicator-style 2
+  # Size is a dropdown (Normal=0, Small=1, Big=2). Use Normal for a less-tiny macOS-like dot.
+  gsettings_set_if_key_exists "$schema" running-indicator-size 0
 
   # macOS-like proportions & behavior (keys vary by version; only set if present)
   gsettings_set_if_key_exists "$schema" icon-size 48
   gsettings_set_if_key_exists "$schema" dock-location "'BOTTOM'"
   gsettings_set_if_key_exists "$schema" panel-mode false
+
+  # Allow hover text (icon labels/tooltips)
+  gsettings_set_if_key_exists "$schema" hide-labels false
+  gsettings_set_if_key_exists "$schema" favorites-only false
 
   # Autohide behavior
   gsettings_set_if_key_exists "$schema" autohide-dash true
@@ -517,6 +544,7 @@ ensure_power_profiles() {
 usage() {
   cat <<EOF
 Usage: $0 [--light|--dark]
+  [--macos-max]
   [--keep-desktop-icons] [--no-packages] [--no-extensions]
   [--show-apps-colored]
   [--fonts-inter] [--cursor-size N] [--finder-files] [--clean-topbar]
@@ -530,6 +558,7 @@ EOF
 }
 
 COLOR_SCHEME="light"
+DO_MACOS_MAX="false"
 KEEP_DESKTOP_ICONS="false"
 DO_PACKAGES="true"
 DO_EXTENSIONS="true"
@@ -549,6 +578,17 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --light) COLOR_SCHEME="light"; shift ;;
     --dark) COLOR_SCHEME="dark"; shift ;;
+    --macos-max)
+      # Opinionated, safe "most macOS-like" preset.
+      DO_MACOS_MAX="true"
+      DO_FONTS_INTER="true"
+      DO_FINDER_FILES="true"
+      DO_CLEAN_TOPBAR="true"
+      DO_LAPTOP="true"
+      DO_MAC_SHORTCUTS="true"
+      DO_QUIET_NOTIFICATIONS="true"
+      shift
+      ;;
     --keep-desktop-icons) KEEP_DESKTOP_ICONS="true"; shift ;;
     --no-packages) DO_PACKAGES="false"; shift ;;
     --no-extensions) DO_EXTENSIONS="false"; shift ;;

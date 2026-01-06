@@ -26,6 +26,12 @@ If you prefer a darker setup:
 ./macosify-ubuntu.sh --dark
 ```
 
+For the most macOS-like (opinionated) setup in one go:
+
+```bash
+./macosify-ubuntu.sh --macos-max --light
+```
+
 ## What it changes
 
 - GNOME settings: left-side window buttons, natural scrolling, hot corners, light/dark preference
@@ -33,6 +39,8 @@ If you prefer a darker setup:
 - Applies theme/icon/cursor/shell theme **if available**
 
 ## Optional flags
+
+- `--macos-max` — opinionated preset: Inter font + clean top bar + laptop touchpad tweaks + Finder-like Files + mac-like shortcuts + quieter notifications
 
 - `--keep-desktop-icons` — keep desktop icons visible (does not disable DING)
 - `--no-packages` — skip `apt install` steps
@@ -65,6 +73,20 @@ Example “enhanced” run:
 
 - On **Wayland**, some shell/theme/icon changes may require a **log out / log in**.
 - If something looks wrong, re-run the script; it’s idempotent.
+
+### Dock vs taskbar collision ("taskbar under the dock")
+
+If you see a second taskbar/panel below the dock, it’s usually a second extension still enabled (commonly Ubuntu Dock, Dash-to-Dock, or Dash-to-Panel). This script disables those if they are installed.
+
+To fix it immediately without re-running the script:
+
+```bash
+gnome-extensions disable ubuntu-dock@ubuntu.com 2>/dev/null || true
+gnome-extensions disable dash-to-dock@micxgx.gmail.com 2>/dev/null || true
+gnome-extensions disable dash-to-panel@jderose9.github.com 2>/dev/null || true
+```
+
+Then log out / log back in (or restart GNOME Shell) if the UI doesn’t refresh.
 
 ## Pushing to GitHub
 
